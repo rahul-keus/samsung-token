@@ -1,51 +1,68 @@
 const express = require('express');
 const axios = require('axios');
+const qs = require('qs');
+
 const dotenv = require('dotenv');
-const app = express();
 dotenv.config();
 
-const PORT = 5000;
-const AUTH_BASE = 'https://auth-global.api.smartthings.com/oauth';
+const app = express();
+const port = 5000;
 
-app.get('/', (req, res) => {
-    res.send(`<a href="/login">Login with SmartThings</a>`);
-});
+// From CLI
+const clientId = process.env.CLIENT_ID;
+const clientSecret = process.env.CLIENT_SECRET;
+const redirectUri = process.env.REDIRECT_URI;
 
+// Step 1: Start OAuth flow
 app.get('/login', (req, res) => {
-    const authUrl = `${AUTH_BASE}/authorize?response_type=code&client_id=${process.env.CLIENT_ID}&scope=${encodeURIComponent(process.env.SCOPES)}&redirect_uri=${encodeURIComponent(process.env.REDIRECT_URI)}`;
-    res.redirect(authUrl);
+  const authUrl = `https://auth-global.api.smartthings.com/oauth/authorize?` +
+    qs.stringify({
+      client_id: clientId,
+      response_type: 'code',
+      scope: 'r:devices:* x:devices:*',
+      redirect_uri: redirectUri
+    });
+    console.log(`Redirecting to: ${authUrl}`);
+  
+  res.redirect(authUrl);
 });
 
+// Step 2: Receive callback
 app.get('/callback', async (req, res) => {
-    const { code } = req.query;
-    if (!code) return res.status(400).send('Missing authorization code');
+  const { code } = req.query;
 
-    try {
-        const tokenUrl = `${AUTH_BASE}/token`;
-        const params = new URLSearchParams();
-        params.append('grant_type', 'authorization_code');
-        params.append('code', code);
-        params.append('client_id', process.env.CLIENT_ID);
-        params.append('client_secret', process.env.CLIENT_SECRET);
-        params.append('redirect_uri', process.env.REDIRECT_URI);
+  try {
+    const response = await axios.post(
+      'https://auth-global.api.smartthings.com/oauth/token',
+      qs.stringify({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        code
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
 
-        const response = await axios.post(tokenUrl, params, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+    console.log('Token exchange successful:', response.data);
+    const { access_token, refresh_token, expires_in } = response.data;
 
-        res.send(`
-            <h1>SmartThings Tokens</h1>
-            <p><strong>Access Token:</strong> ${response.data.access_token}</p>
-            <p><strong>Refresh Token:</strong> ${response.data.refresh_token}</p>
-            <p><strong>Token Type:</strong> ${response.data.token_type}</p>
-            <p><strong>Expires In:</strong> ${response.data.expires_in} seconds</p>
-        `);
-    } catch (err) {
-        console.error(err.response?.data || err.message);
-        res.status(500).send('Failed to get tokens');
-    }
+    res.send(`
+      <h2>Token Received</h2>
+      <p><strong>Access Token:</strong> ${access_token}</p>
+      <p><strong>Refresh Token:</strong> ${refresh_token}</p>
+      <p><strong>Expires In:</strong> ${expires_in} seconds</p>
+    `);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send('Token exchange failed.');
+  }
 });
 
-app.listen(PORT, () => {
-    console.log(`SmartThings OAuth app listening at http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`Keus OAuth app listening at http://localhost:${port}`);
 });
