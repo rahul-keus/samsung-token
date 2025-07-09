@@ -13,7 +13,7 @@ const config = {
   clientId: process.env.SMARTTHINGS_CLIENT_ID,
   clientSecret: process.env.SMARTTHINGS_CLIENT_SECRET,
   redirectUri: process.env.REDIRECT_URI || 'https://samsung-keus.onrender.com/callback',
-  scope: 'r:devices:* x:devices:* r:devices:$ x:devices:$ w:installedapps r:installedapps'
+  scope: 'r:devices:* x:devices:* r:devices:$ x:devices:$'
 };
 
 // Store tokens (in production, use proper storage)
