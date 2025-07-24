@@ -43,7 +43,7 @@ app.get('/', (req, res) => {
                   </div>
                 </td>
                 <td style="padding: 10px; border-bottom: 1px solid #dee2e6; text-align: center;">
-                  <button onclick="copyToClipboard('${value}')" class="copy-button">
+                  <button onclick="copyToClipboard(event, '${value}')" class="copy-button">
                     📋 Copy
                   </button>
                 </td>
@@ -96,9 +96,9 @@ app.get('/', (req, res) => {
         }
       </style>
       <script>
-        function copyToClipboard(text) {
+        function copyToClipboard(event, text) {
+          const button = event.target;
           navigator.clipboard.writeText(text).then(() => {
-            const button = event.target;
             const originalText = button.innerHTML;
             button.innerHTML = '✅ Copied!';
             setTimeout(() => {
@@ -106,7 +106,6 @@ app.get('/', (req, res) => {
             }, 2000);
           }).catch(err => {
             console.error('Failed to copy:', err);
-            alert('Failed to copy to clipboard');
           });
         }
       </script>
@@ -213,6 +212,12 @@ app.get('/callback', async (req, res) => {
     console.log('Token exchange response status:', tokenResponse.status);
     console.log('Token exchange response data:', tokenResponse.data);
     console.log('Token exchange response headers:', tokenResponse.headers);
+
+    const responseData = {
+      access_token: tokenResponse.data.access_token,
+      refresh_token: tokenResponse.data.refresh_token,
+      expires_in: tokenResponse.data.expires_in
+    }
 
     // Check if the response was successful
     if (tokenResponse.status >= 200 && tokenResponse.status < 300) {
