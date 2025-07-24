@@ -2,3 +2,4 @@
 /.env
 /*.txt
 test.js
+tokens.json
