@@ -25,9 +25,32 @@ app.get('/', (req, res) => {
     tokenDataHtml = `
       <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 5px;">
         <h2>🎉 Token Exchange Successful!</h2>
-        <pre style="background: #fff; padding: 15px; border-radius: 5px; overflow-x: auto;">
-${JSON.stringify(tokenData, null, 2)}
-        </pre>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+          <thead>
+            <tr>
+              <th style="text-align: left; padding: 10px; border-bottom: 2px solid #dee2e6;">Key</th>
+              <th style="text-align: left; padding: 10px; border-bottom: 2px solid #dee2e6;">Value</th>
+              <th style="text-align: center; padding: 10px; border-bottom: 2px solid #dee2e6;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(tokenData).map(([key, value]) => `
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>${key}</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">
+                  <div style="max-width: 300px; overflow-x: auto;">
+                    <code>${value}</code>
+                  </div>
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #dee2e6; text-align: center;">
+                  <button onclick="copyToClipboard('${value}')" class="copy-button">
+                    📋 Copy
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
     `;
   }
@@ -53,7 +76,40 @@ ${JSON.stringify(tokenData, null, 2)}
           border-radius: 5px;
           margin: 20px 0;
         }
+        .copy-button {
+          padding: 5px 10px;
+          background: #28a745;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .copy-button:hover {
+          background: #218838;
+        }
+        code {
+          background: #f8f9fa;
+          padding: 2px 4px;
+          border-radius: 3px;
+          font-family: monospace;
+        }
       </style>
+      <script>
+        function copyToClipboard(text) {
+          navigator.clipboard.writeText(text).then(() => {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '✅ Copied!';
+            setTimeout(() => {
+              button.innerHTML = originalText;
+            }, 2000);
+          }).catch(err => {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy to clipboard');
+          });
+        }
+      </script>
     </head>
     <body>
       <h1>Samsung SmartThings TV Controller</h1>    
