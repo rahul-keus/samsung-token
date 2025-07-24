@@ -123,10 +123,19 @@ app.get('/', (req, res) => {
           <a href="/tvs">📺 List Samsung TVs</a>
         </div>
         
-        <h3>TV Control APIs:</h3>
-        <p><strong>POST</strong> /tvs/{deviceId}/power - Body: {"action": "on/off"}</p>
-        <p><strong>POST</strong> /tvs/{deviceId}/volume - Body: {"level": 0-100}</p>
-        <p><strong>POST</strong> /tvs/{deviceId}/channel - Body: {"channel": "channelNumber"}</p>
+                 <h3>TV Control APIs:</h3>
+         <p><strong>POST</strong> /tvs/{deviceId}/power - Body: {"action": "on/off"}</p>
+         <p><strong>POST</strong> /tvs/{deviceId}/volume - Body: {"level": 0-100}</p>
+         <p><strong>POST</strong> /tvs/{deviceId}/channel - Body: {"channel": "channelNumber"}</p>
+         
+         <div style="background: #e7f3ff; color: #0c5460; padding: 10px; border-radius: 5px; margin: 10px 0;">
+           <h4>🔐 OAuth Notes:</h4>
+           <ul style="margin: 5px 0; padding-left: 20px;">
+             <li>Authorization codes expire within 10 minutes</li>
+             <li>Each code can only be used once</li>
+             <li>If authentication fails, start fresh - don't retry</li>
+           </ul>
+         </div>
       ` : ''}
       
       ${tokens.access_token && !isTokenValid ? `
@@ -200,6 +209,7 @@ app.get('/callback', async (req, res) => {
   const { code, error, state } = req.query;
 
   console.log('=== OAuth Callback Debug ===');
+  console.log('Callback timestamp:', new Date().toISOString());
   console.log('Query parameters:', req.query);
   console.log('Code received:', code);
   console.log('Error received:', error);
@@ -221,6 +231,7 @@ app.get('/callback', async (req, res) => {
 
   try {
     console.log('Attempting token exchange...');
+    console.log('Token exchange timestamp:', new Date().toISOString());
 
     // SmartThings expects Basic Auth for client credentials (discovered from www-authenticate header)
     const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
@@ -289,7 +300,36 @@ app.get('/callback', async (req, res) => {
 
       res.redirect('/');
     } else {
-      // Handle non-success status codes
+      // Handle non-success status codes with specific OAuth error handling
+      const errorData = tokenResponse.data;
+
+      if (errorData?.error === 'invalid_grant' && errorData?.error_description?.includes('Invalid authorization code')) {
+        console.log('❌ Authorization code invalid or expired - user needs to re-authenticate');
+        return res.send(`
+          <h1>🔄 Authorization Code Expired</h1>
+          <div style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3>Code Already Used or Expired</h3>
+            <p><strong>Issue:</strong> ${errorData.error_description}</p>
+            <p><strong>Reason:</strong> Authorization codes can only be used once and expire within 10 minutes.</p>
+          </div>
+          
+          <h3>📝 What to do:</h3>
+          <ol>
+            <li>Authorization codes are single-use and expire quickly</li>
+            <li>You need to start the OAuth flow again with a fresh code</li>
+            <li>Don't refresh or go back - use the button below</li>
+          </ol>
+          
+          <a href="/auth" style="display: inline-block; padding: 15px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; font-size: 16px; margin: 20px 0;">
+            🔐 Start Fresh Authentication
+          </a>
+          
+          <div style="margin-top: 30px; font-size: 12px; color: #666;">
+            <p><strong>Debug Info:</strong> Code '${errorData.error_description?.split(': ')[1]}' has been consumed or expired</p>
+          </div>
+        `);
+      }
+
       throw new Error(`Token exchange failed with status ${tokenResponse.status}: ${JSON.stringify(tokenResponse.data)}`);
     }
   } catch (error) {
