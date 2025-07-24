@@ -145,44 +145,110 @@ app.get('/', (req, res) => {
   `);
 });
 
+// Debug configuration endpoint
+app.get('/debug', (req, res) => {
+  res.json({
+    environment: 'Render',
+    configValid: configValid,
+    config: {
+      clientId: config.clientId,
+      clientSecret: config.clientSecret ? 'SET' : 'NOT SET',
+      redirectUri: config.redirectUri,
+      scope: config.scope
+    },
+    tokens: {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresAt: tokens.expires_at ? new Date(tokens.expires_at).toISOString() : null,
+      isExpired: tokens.expires_at ? Date.now() > tokens.expires_at : null
+    },
+    currentTime: new Date().toISOString()
+  });
+});
+
 // Start OAuth flow
 app.get('/auth', (req, res) => {
+  if (!configValid) {
+    return res.send(`
+      <h1>❌ Configuration Error</h1>
+      <p>Please set the required environment variables in Render:</p>
+      <ul>
+        <li>SMARTTHINGS_CLIENT_ID</li>
+        <li>SMARTTHINGS_CLIENT_SECRET</li>
+      </ul>
+      <a href="/">← Back to Home</a>
+    `);
+  }
+
   const authUrl = `https://api.smartthings.com/oauth/authorize?` +
     `client_id=${config.clientId}&` +
     `scope=${encodeURIComponent(config.scope)}&` +
     `response_type=code&` +
     `redirect_uri=${encodeURIComponent(config.redirectUri)}`;
 
-  console.log('Redirecting to SmartThings OAuth:', authUrl);
+  console.log('=== Starting OAuth Flow ===');
+  console.log('Auth URL:', authUrl);
+  console.log('Client ID:', config.clientId);
+  console.log('Redirect URI:', config.redirectUri);
+  console.log('Scope:', config.scope);
+
   res.redirect(authUrl);
 });
 
 // OAuth callback
 app.get('/callback', async (req, res) => {
-  const { code, error } = req.query;
-  console.log('OAuth callback received:', { code, error });
+  const { code, error, state } = req.query;
+
+  console.log('=== OAuth Callback Debug ===');
+  console.log('Query parameters:', req.query);
+  console.log('Code received:', code);
+  console.log('Error received:', error);
+  console.log('Config being used:', {
+    clientId: config.clientId,
+    redirectUri: config.redirectUri,
+    clientSecret: config.clientSecret ? '***SET***' : 'NOT SET'
+  });
 
   if (error) {
+    console.error('OAuth error received:', error);
     return res.send(`Error: ${error}`);
   }
 
+  if (!code) {
+    console.error('No authorization code received');
+    return res.send('No authorization code received');
+  }
+
   try {
+    console.log('Attempting token exchange...');
+
+    // Prepare token exchange request
+    const tokenRequestData = {
+      grant_type: 'authorization_code',
+      code: code,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      redirect_uri: config.redirectUri
+    };
+
+    console.log('Token request data:', {
+      ...tokenRequestData,
+      client_secret: '***HIDDEN***'
+    });
+
     // Exchange authorization code for tokens
     const tokenResponse = await axios.post(
       'https://api.smartthings.com/oauth/token',
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        redirect_uri: config.redirectUri
-      }),
+      new URLSearchParams(tokenRequestData),
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
         }
       }
     );
+
+    console.log('Token exchange successful!');
 
     // Store tokens
     tokens.access_token = tokenResponse.data.access_token;
@@ -200,23 +266,60 @@ app.get('/callback', async (req, res) => {
 
     res.redirect('/');
   } catch (error) {
-    console.error('Error exchanging code for tokens:', {
+    console.error('=== Token Exchange Failed ===');
+    console.error('Error status:', error.response?.status);
+    console.error('Error message:', error.message);
+    console.error('Response data:', error.response?.data);
+    console.error('Request URL:', error.config?.url);
+    console.error('Request method:', error.config?.method);
+    console.error('Request data:', error.config?.data);
+    console.error('Request headers:', error.config?.headers);
+
+    // Check for specific 401 error patterns
+    if (error.response?.status === 401) {
+      console.error('❌ 401 Unauthorized - This usually means:');
+      console.error('1. Invalid client_id or client_secret');
+      console.error('2. Authorization code has expired or already been used');
+      console.error('3. Redirect URI mismatch');
+      console.error('4. Client not configured properly in SmartThings Developer Console');
+    }
+
+    res.send(`
+      <h1>❌ Error getting tokens</h1>
+      <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <h3>Status: ${error.response?.status || 'Unknown'}</h3>
+        <p><strong>Error:</strong> ${error.message}</p>
+        ${error.response?.data ? `<p><strong>Details:</strong> ${JSON.stringify(error.response.data, null, 2)}</p>` : ''}
+      </div>
+      
+      <h3>🔧 Troubleshooting Steps:</h3>
+      <ol>
+        <li>Check your SmartThings Developer Console OAuth settings</li>
+        <li>Verify redirect URI matches exactly: <code>${config.redirectUri}</code></li>
+        <li>Ensure client credentials are correct</li>
+        <li>Try the authentication flow again (authorization codes expire quickly)</li>
+      </ol>
+      
+      <a href="/" style="display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">← Back to Home</a>
+      
+      <details style="margin-top: 30px;">
+        <summary>Debug Information</summary>
+        <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto;">
+Config:
+- Client ID: ${config.clientId}
+- Redirect URI: ${config.redirectUri}
+- Client Secret: ${config.clientSecret ? 'SET' : 'NOT SET'}
+
+Error Details:
+${JSON.stringify({
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
-      message: error.message,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        data: error.config?.data
-      }
-    });
-    res.send(`
-      <h1>Error getting tokens</h1>
-      <pre>${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
-      <p>Check server console for more details</p>
+      message: error.message
+    }, null, 2)}
+        </pre>
+      </details>
     `);
-
   }
 });
 
