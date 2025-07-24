@@ -224,7 +224,7 @@ app.get('/callback', async (req, res) => {
       console.log('Token exchange successful!');
 
       // Convert token data to base64 and pass as URL parameter
-      const tokenDataBase64 = Buffer.from(JSON.stringify(tokenResponse.data)).toString('base64');
+      const tokenDataBase64 = Buffer.from(JSON.stringify(responseData)).toString('base64');
       res.redirect(`/?tokenData=${tokenDataBase64}`);
     } else {
       // Handle non-success status codes with specific OAuth error handling
