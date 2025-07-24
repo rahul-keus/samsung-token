@@ -237,43 +237,78 @@ app.get('/callback', async (req, res) => {
     });
 
     // Exchange authorization code for tokens
-    const tokenResponse = await axios.post(
-      'https://api.smartthings.com/oauth/token',
-      new URLSearchParams(tokenRequestData),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        }
+    console.log('Making token exchange request to:', 'https://api.smartthings.com/oauth/token');
+    console.log('Request headers:', {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json'
+    });
+    console.log('Request body (URL encoded):', new URLSearchParams(tokenRequestData).toString());
+
+    // Try alternative request format for SmartThings OAuth
+    const requestBody = new URLSearchParams(tokenRequestData);
+    console.log('Attempting token exchange with body:', requestBody.toString());
+
+    const tokenResponse = await axios({
+      method: 'POST',
+      url: 'https://api.smartthings.com/oauth/token',
+      data: requestBody.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'Keus-Samsung-TV-Controller/1.0'
+      },
+      timeout: 30000,
+      maxRedirects: 0,
+      validateStatus: function (status) {
+        return status >= 200 && status < 600; // Don't throw on any status to see full response
       }
-    );
-
-    console.log('Token exchange successful!');
-
-    // Store tokens
-    tokens.access_token = tokenResponse.data.access_token;
-    tokens.refresh_token = tokenResponse.data.refresh_token;
-    tokens.expires_at = Date.now() + (tokenResponse.data.expires_in * 1000);
-
-    // Save tokens to file
-    saveTokens();
-
-    console.log('Tokens received:', {
-      access_token: tokens.access_token.substring(0, 20) + '...',
-      refresh_token: tokens.refresh_token.substring(0, 20) + '...',
-      expires_in: tokenResponse.data.expires_in
     });
 
-    res.redirect('/');
+    console.log('Token exchange response status:', tokenResponse.status);
+    console.log('Token exchange response data:', tokenResponse.data);
+    console.log('Token exchange response headers:', tokenResponse.headers);
+
+    // Check if the response was successful
+    if (tokenResponse.status >= 200 && tokenResponse.status < 300) {
+      console.log('Token exchange successful!');
+
+      // Store tokens
+      tokens.access_token = tokenResponse.data.access_token;
+      tokens.refresh_token = tokenResponse.data.refresh_token;
+      tokens.expires_at = Date.now() + (tokenResponse.data.expires_in * 1000);
+
+      // Save tokens to file
+      saveTokens();
+
+      console.log('Tokens received:', {
+        access_token: tokens.access_token.substring(0, 20) + '...',
+        refresh_token: tokens.refresh_token.substring(0, 20) + '...',
+        expires_in: tokenResponse.data.expires_in
+      });
+
+      res.redirect('/');
+    } else {
+      // Handle non-success status codes
+      throw new Error(`Token exchange failed with status ${tokenResponse.status}: ${JSON.stringify(tokenResponse.data)}`);
+    }
   } catch (error) {
     console.error('=== Token Exchange Failed ===');
     console.error('Error status:', error.response?.status);
+    console.error('Error status text:', error.response?.statusText);
     console.error('Error message:', error.message);
     console.error('Response data:', error.response?.data);
+    console.error('Response headers:', error.response?.headers);
     console.error('Request URL:', error.config?.url);
     console.error('Request method:', error.config?.method);
     console.error('Request data:', error.config?.data);
     console.error('Request headers:', error.config?.headers);
+
+    // Additional debugging for SmartThings specific issues
+    console.error('=== SmartThings OAuth Debug ===');
+    console.error('Client ID used:', config.clientId);
+    console.error('Redirect URI used:', config.redirectUri);
+    console.error('Authorization code received:', code?.substring(0, 10) + '...');
+    console.error('Full request payload:', new URLSearchParams(tokenRequestData).toString());
 
     // Check for specific 401 error patterns
     if (error.response?.status === 401) {
