@@ -16,23 +16,49 @@ const config = {
   scope: 'r:devices:* x:devices:* r:devices:$ x:devices:$'
 };
 
-let tokens = {
-  access_token: null,
-  refresh_token: null,
-  expires_at: null
-};
-
 // Home route - starts OAuth flow
 app.get('/', (req, res) => {
+  let tokenDataHtml = '';
+  const tokenData = req.query.tokenData ? JSON.parse(Buffer.from(req.query.tokenData, 'base64').toString()) : null;
+
+  if (tokenData) {
+    tokenDataHtml = `
+      <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+        <h2>🎉 Token Exchange Successful!</h2>
+        <pre style="background: #fff; padding: 15px; border-radius: 5px; overflow-x: auto;">
+${JSON.stringify(tokenData, null, 2)}
+        </pre>
+      </div>
+    `;
+  }
+
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
       <title>Samsung SmartThings Controller</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .connect-button {
+          display: inline-block;
+          padding: 10px 20px;
+          background: #007bff;
+          color: white;
+          text-decoration: none;
+          border-radius: 5px;
+          margin: 20px 0;
+        }
+      </style>
     </head>
     <body>
       <h1>Samsung SmartThings TV Controller</h1>    
-      <a href="/auth">🔐 Connect to SmartThings</a>
+      <a href="/auth" class="connect-button">🔐 Connect to SmartThings</a>
+      ${tokenDataHtml}
     </body>
     </html>
   `);
@@ -136,13 +162,9 @@ app.get('/callback', async (req, res) => {
     if (tokenResponse.status >= 200 && tokenResponse.status < 300) {
       console.log('Token exchange successful!');
 
-      console.log('Tokens received:', {
-        access_token: tokens.access_token.substring(0, 20) + '...',
-        refresh_token: tokens.refresh_token.substring(0, 20) + '...',
-        expires_in: tokenResponse.data.expires_in
-      });
-
-      res.redirect('/');
+      // Convert token data to base64 and pass as URL parameter
+      const tokenDataBase64 = Buffer.from(JSON.stringify(tokenResponse.data)).toString('base64');
+      res.redirect(`/?tokenData=${tokenDataBase64}`);
     } else {
       // Handle non-success status codes with specific OAuth error handling
       const errorData = tokenResponse.data;
