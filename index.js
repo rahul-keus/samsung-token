@@ -222,41 +222,42 @@ app.get('/callback', async (req, res) => {
   try {
     console.log('Attempting token exchange...');
 
-    // Prepare token exchange request
+    // SmartThings expects Basic Auth for client credentials (discovered from www-authenticate header)
+    const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+
+    // Prepare token exchange request (WITHOUT client credentials in body)
     const tokenRequestData = {
       grant_type: 'authorization_code',
       code: code,
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
       redirect_uri: config.redirectUri
     };
 
-    console.log('Token request data:', {
-      ...tokenRequestData,
-      client_secret: '***HIDDEN***'
-    });
+    console.log('Token request data (Basic Auth method):', tokenRequestData);
+    console.log('Using Basic Auth header with client credentials');
 
     // Exchange authorization code for tokens
     console.log('Making token exchange request to:', 'https://api.smartthings.com/oauth/token');
-    console.log('Request headers:', {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json'
-    });
-    console.log('Request body (URL encoded):', new URLSearchParams(tokenRequestData).toString());
 
-    // Try alternative request format for SmartThings OAuth
+    const requestHeaders = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Authorization': `Basic ${basicAuth}`,
+      'User-Agent': 'Keus-Samsung-TV-Controller/1.0'
+    };
+
+    console.log('Request headers (auth hidden):', {
+      ...requestHeaders,
+      'Authorization': 'Basic ***HIDDEN***'
+    });
+
     const requestBody = new URLSearchParams(tokenRequestData);
-    console.log('Attempting token exchange with body:', requestBody.toString());
+    console.log('Request body (URL encoded):', requestBody.toString());
 
     const tokenResponse = await axios({
       method: 'POST',
       url: 'https://api.smartthings.com/oauth/token',
       data: requestBody.toString(),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'User-Agent': 'Keus-Samsung-TV-Controller/1.0'
-      },
+      headers: requestHeaders,
       timeout: 30000,
       maxRedirects: 0,
       validateStatus: function (status) {
@@ -308,7 +309,7 @@ app.get('/callback', async (req, res) => {
     console.error('Client ID used:', config.clientId);
     console.error('Redirect URI used:', config.redirectUri);
     console.error('Authorization code received:', code?.substring(0, 10) + '...');
-    console.error('Full request payload:', new URLSearchParams(tokenRequestData).toString());
+    console.error('Full request payload:', 'tokenRequestData not available in error scope');
 
     // Check for specific 401 error patterns
     if (error.response?.status === 401) {
